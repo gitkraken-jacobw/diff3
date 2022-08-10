@@ -42,30 +42,18 @@ function diff2MergeIndices(a, b) {
 
   for (var hunkIndex = 0; hunkIndex < hunks.length; hunkIndex++) {
     var hunk = hunks[hunkIndex];
-    var regionLhs = hunk.file1[0];
-    var regionRhs = regionLhs + hunk.file1[1];
 
-    copyCommon(regionLhs);
+    copyCommon(hunk.file1[0]);
 
-    var aLhs = hunk.file1[0];
-    var aRhs = aLhs + hunk.file1[1];
-    var abLhs = hunk.file2[0];
-    var abRhs = abLhs + hunk.file2[1];
-
-    var aLhs = regionLhs;
-    var aRhs = regionRhs;
-    var bLhs = abLhs + (regionLhs - aLhs);
-    var bRhs = abRhs + (regionRhs - aRhs);
     result.push({
       isConflict: true,
       indices: [
-        aLhs, aRhs - aLhs,
-        regionLhs, regionRhs - regionLhs,
-        bLhs, bRhs - bLhs
+        hunk.file1[0], hunk.file1[1],
+        hunk.file2[0], hunk.file2[1]
       ]
     });
 
-    commonOffset = regionRhs;
+    commonOffset = hunk.file1[0] + hunk.file1[1];
   }
 
   copyCommon(a.length);
@@ -266,10 +254,10 @@ function diff2Merge(a, b) {
   }
 
   function isTrueConflict(rec) {
-    if (rec[2] != rec[6]) return true;
-    var aoff = rec[1];
-    var boff = rec[5];
-    for (var j = 0; j < rec[2]; j++) {
+    if (rec[1] != rec[3]) return true;
+    var aoff = rec[0];
+    var boff = rec[2];
+    for (var j = 0; j < rec[1]; j++) {
       if (a[j + aoff] != b[j + boff]) return true;
     }
     return false;
@@ -286,10 +274,10 @@ function diff2Merge(a, b) {
           conflict: {
             a: a.slice(x.indices[0], x.indices[0] + x.indices[1]),
             aIndex: x.indices[0],
-            o: a.slice(x.indices[2], x.indices[2] + x.indices[3]),
-            oIndex: x.indices[2],
-            b: b.slice(x.indices[4], x.indices[4] + x.indices[5]),
-            bIndex: x.indices[4]
+            o: null,
+            oIndex: null,
+            b: b.slice(x.indices[2], x.indices[2] + x.indices[3]),
+            bIndex: x.indices[2]
           }
         });
       }
