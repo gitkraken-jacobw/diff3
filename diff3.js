@@ -24,6 +24,54 @@
 
 var onp = require('./onp');
 
+function diff2MergeIndices(a, b) {
+  var hunks = new onp(a, b).compose();
+
+  var result = [];
+  var commonOffset = 0;
+
+  function copyCommon(targetOffset) {
+    if (targetOffset > commonOffset) {
+      result.push({
+        isConflict: false,
+        indices: [commonOffset, targetOffset - commonOffset]
+      });
+      commonOffset = targetOffset;
+    }
+  }
+
+  for (var hunkIndex = 0; hunkIndex < hunks.length; hunkIndex++) {
+    var hunk = hunks[hunkIndex];
+    var regionLhs = hunk.file1[0];
+    var regionRhs = regionLhs + hunk.file1[1];
+
+    copyCommon(regionLhs);
+
+    var aLhs = hunk.file1[0];
+    var aRhs = aLhs + hunk.file1[1];
+    var abLhs = hunk.file2[0];
+    var abRhs = abLhs + hunk.file2[1];
+
+    var aLhs = regionLhs;
+    var aRhs = regionRhs;
+    var bLhs = abLhs + (regionLhs - aLhs);
+    var bRhs = abRhs + (regionRhs - aRhs);
+    result.push({
+      isConflict: true,
+      indices: [
+        aLhs, aRhs - aLhs,
+        regionLhs, regionRhs - regionLhs,
+        bLhs, bRhs - bLhs
+      ]
+    });
+
+    commonOffset = regionRhs;
+  }
+
+  copyCommon(a.length);
+  return result;
+}
+
 function diff3MergeIndices(a, o, b) {
   // Given three files, A, O, and B, where both A and B are
   // independently derived from O, returns a fairly complicated
@@ -192,4 +240,69 @@ function diff3Merge(a, o, b) {
   return result;
 }
 
-module.exports = diff3Merge;
+function diff2Merge(a, b) {
+  // performs the same kind of merge conflict algorithm, but only requires two files. used when
+  // there is no shared base between a and b, but trying to merge them still produces a conflict
+  // inside of a git repo
+  
+  var result = [];
+  var indices = diff2MergeIndices(a, b);
+
+  var okLines = [];
+
+  function flushOk() {
+    if (okLines.length) {
+      result.push({
+        ok: okLines
+      });
+    }
+    okLines = [];
+  }
+
+  function pushOk(xs) {
+    for (var j = 0; j < xs.length; j++) {
+      okLines.push(xs[j]);
+    }
+  }
+
+  function isTrueConflict(rec) {
+    if (rec[2] != rec[6]) return true;
+    var aoff = rec[1];
+    var boff = rec[5];
+    for (var j = 0; j < rec[2]; j++) {
+      if (a[j + aoff] != b[j + boff]) return true;
+    }
+    return false;
+  }
+
+  for (var i = 0; i < indices.length; i++) {
+    var x = indices[i];
+    if (x.isConflict) {
+      if (!isTrueConflict(x.indices)) {
+        pushOk(a.slice(x.indices[0], x.indices[0] + x.indices[1]));
+      } else {
+        flushOk();
+        result.push({
+          conflict: {
+            a: a.slice(x.indices[0], x.indices[0] + x.indices[1]),
+            aIndex: x.indices[0],
+            o: a.slice(x.indices[2], x.indices[2] + x.indices[3]),
+            oIndex: x.indices[2],
+            b: b.slice(x.indices[4], x.indices[4] + x.indices[5]),
+            bIndex: x.indices[4]
+          }
+        });
+      }
+    } else {
+      pushOk(a.slice(x.indices[0], x.indices[0] + x.indices[1]));
+    }
+  }
+
+  flushOk();
+  return result;
+}
+
+module.exports = {
+  diff3Merge,
+  diff2Merge,
+};
